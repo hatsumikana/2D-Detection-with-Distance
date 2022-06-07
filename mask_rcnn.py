@@ -17,7 +17,7 @@ class MaskRCNN:
         # Conf threshold
         self.detection_threshold = 0.7
         self.mask_threshold = 0.3
-
+  
         self.classes = []
         with open("dnn/classes.txt", "r") as file_object:
             for class_name in file_object.readlines():
@@ -104,13 +104,16 @@ class MaskRCNN:
     def draw_object_info(self, bgr_frame, depth_frame):
         # loop through the detection
         for box, class_id, obj_center in zip(self.obj_boxes, self.obj_classes, self.obj_centers):
+            print("object boxes: ", self.obj_boxes)
+            print("object classes: ", self.obj_classes)
+            print("object centers: ", self.obj_centers)
             x, y, x2, y2 = box
 
             color = self.colors[int(class_id)]
             color = (int(color[0]), int(color[1]), int(color[2]))
 
             cx, cy = obj_center
-
+            print(depth_frame)
             depth_mm = depth_frame[cy, cx]
 
             cv2.line(bgr_frame, (cx, y), (cx, y2), color, 1)

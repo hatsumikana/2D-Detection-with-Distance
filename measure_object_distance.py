@@ -15,7 +15,7 @@ while True:
 	boxes, classes, contours, centers = mrcnn.detect_objects_mask(bgr_frame)
 
 	# Draw object mask
-	bgr_frame = mrcnn.draw_object_mask(bgr_frame)
+	# bgr_frame = mrcnn.draw_object_mask(bgr_frame)
 
 	# Show depth info of the objects
 	mrcnn.draw_object_info(bgr_frame, depth_frame)
