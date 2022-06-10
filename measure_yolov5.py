@@ -7,6 +7,7 @@ import torch
 from realsense_camera import *
 import time
 from fps import FPS
+import math
 
 # Load Realsense camera
 rs = RealsenseCamera()
@@ -28,15 +29,17 @@ def draw_object_info(bgr_frame, depth_frame, obj_boxes, obj_classes , obj_center
             cx, cy = obj_center
             # print(cx, cy)
             # print(depth_frame.size)
-            depth_mm = depth_frame[cy, cx] # SOMETHING WRONG HERE :((((
+            depth_mm = depth_frame[cy, cx] 
             
             cv2.line(bgr_frame, (cx, y), (cx, y2), color, 1)
             cv2.line(bgr_frame, (x, cy), (x2, cy), color, 1)
 
             class_name = class_id
+            depth = (depth_mm / 10) * math.cos(math.radians(33.4)) 
+            
             cv2.rectangle(bgr_frame, (x, y), (x + 250, y + 70), color, -1)
             cv2.putText(bgr_frame, class_name.capitalize(), (x + 5, y + 25), 0, 0.8, (255, 255, 255), 2)
-            cv2.putText(bgr_frame, "{} cm".format(depth_mm / 10), (x + 5, y + 60), 0, 1.0, (255, 255, 255), 2)
+            cv2.putText(bgr_frame, "{} cm".format(depth), (x + 5, y + 60), 0, 1.0, (255, 255, 255), 2)
             cv2.rectangle(bgr_frame, (x, y), (x2, y2), color, 1)
         return bgr_frame
 

@@ -1,0 +1,7 @@
+torch
+pyrealsense2
+pandas
+tqdm
+torchvision
+matplotlib
+seaborn
