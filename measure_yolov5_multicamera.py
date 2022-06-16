@@ -1,16 +1,12 @@
-import faulthandler
-
-faulthandler.enable()
-#https://pysource.com
+import pyrealsense2 as rs
+import numpy as np
 import cv2
+import logging
 import torch
 from realsense_camera import *
-import time
 from fps import FPS
 import math
 
-# Load Realsense camera
-rs = RealsenseCamera()
 
 def draw_object_info(bgr_frame, depth_frame, obj_boxes, obj_classes , obj_centers):
         # loop through the detection
@@ -36,27 +32,67 @@ def draw_object_info(bgr_frame, depth_frame, obj_boxes, obj_classes , obj_center
             cv2.rectangle(bgr_frame, (x, y), (x2, y2), color, 1)
         return bgr_frame
 
+# Configure depth and color streams...
+# ...from Camera 1
+pipeline_1 = rs.pipeline()
+config_1 = rs.config()
+config_1.enable_device('919122072891')
+config_1.enable_stream(rs.stream.depth)
+config_1.enable_stream(rs.stream.color)
+
+# ...from Camera 2
+pipeline_2 = rs.pipeline()
+config_2 = rs.config()
+config_2.enable_device('020522070950')
+config_2.enable_stream(rs.stream.depth)
+config_2.enable_stream(rs.stream.color)
+
+
+# Start streaming from both cameras
+pipeline_1.start(config_1)
+pipeline_2.start(config_2)
 
 print("Loading ...")
 model = torch.hub.load('ultralytics/yolov5','custom', path='checkpoints/yolov5s.pt')
-# yolo_model = torch.hub.load('ultralytics/yolov5', 'custom', path='../yolov5/yolov5s.pt')
 print("Loaded YOLO...")
 total_fps = FPS()
+total_fps2 = FPS()
+
+
 while True:
-    # Get frame in real time from Realsense camera
+    # Camera 1
+    # Wait for a coherent pair of frames: depth and color
+    frames_1 = pipeline_1.wait_for_frames()
+    depth_frame_1 = frames_1.get_depth_frame()
+    color_frame_1 = frames_1.get_color_frame()
+    if not depth_frame_1 or not color_frame_1:
+        continue
+    # Convert images to numpy arrays
+    depth_image_1 = np.asanyarray(depth_frame_1.get_data())
+    color_image_1 = np.asanyarray(color_frame_1.get_data())
     
-    ret, bgr_frame, depth_frame = rs.get_frame_stream()
-    bgr_src = bgr_frame.copy()
+    # Camera 2
+    # Wait for a coherent pair of frames: depth and color
+    frames_2 = pipeline_2.wait_for_frames()
+    depth_frame_2 = frames_2.get_depth_frame()
+    color_frame_2 = frames_2.get_color_frame()
+    if not depth_frame_2 or not color_frame_2:
+        continue
+    # Convert images to numpy arrays
+    depth_image_2 = np.asanyarray(depth_frame_2.get_data())
+    color_image_2 = np.asanyarray(color_frame_2.get_data())
+    
+    color_image_concat = np.concatenate((color_image_1, color_image_2), axis=0)
+    depth_image_concat = np.concatenate((depth_image_1, depth_image_2), axis=0)
+    
     total_fps.start()
-    result = model(bgr_src)
+    result = model(color_image_concat)
     classes =  list(result.pandas().xyxy[0]["name"])
     coordinates = result.xyxy[0].detach().cpu().numpy()
     centre_pts = []
     obj_coordinates = []
 
     for coord, cls in zip(coordinates, classes):
-        # cv2.putText(bgr_src, cls, (int(coord[0]),int(coord[1])), cv2.FONT_HERSHEY_COMPLEX, 1, (255,255,255), 2)
-        # cv2.rectangle(bgr_src, (int(coord[0]),int(coord[1])), (int(coord[2]),int(coord[3])),(255, 255, 255),2)
         xCenter = int(coord[0]) + int((int(coord[2]) - int(coord[0]))/2)
         yCenter = int(coord[1]) + int((int(coord[3]) - int(coord[1]))/2)
     
@@ -64,19 +100,23 @@ while True:
         obj_coordinates.append([int(coord[0]), int(coord[1]), int(coord[2]), int(coord[3])])
     
 	# Show depth info of the objects
-    bgr = draw_object_info(bgr_frame, depth_frame, obj_coordinates, classes, centre_pts)
+    bgr = draw_object_info(color_image_concat, depth_image_concat, obj_coordinates, classes, centre_pts)
     total_fps.stop()
     
     cv2.putText(bgr, f"FPS: {total_fps.getFPS():.2f}", (7,40), cv2.FONT_HERSHEY_COMPLEX, 1.4, (100, 255, 0), 3, cv2.LINE_AA)
 
-
-    cv2.imshow("Bgr frame", bgr)
+    # Show images from both cameras
+    color_image_concat = cv2.cvtColor(color_image_concat, cv2.COLOR_BGR2RGB)
+    cv2.imshow('top and front', color_image_concat)
+    cv2.waitKey(1)
 
     key = cv2.waitKey(1)
     if key == 27:
-	    break
+        break
 
-rs.release()
+
+
+# Stop streaming
 cv2.destroyAllWindows()
-
-# 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
+pipeline_1.stop()
+pipeline_2.stop()
