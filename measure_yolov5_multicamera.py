@@ -96,11 +96,12 @@ try:
         total_fps.start()
         result = model(concat_color_image)
         classes =  list(result.pandas().xyxy[0]["name"])
+        confidence = list(result.pandas().xyxy[0]["confidence"])
         coordinates = result.xyxy[0].detach().cpu().numpy()
         centre_pts = []
         obj_coordinates = []
 
-        for coord, cls in zip(coordinates, classes):
+        for coord, cls in zip(coordinates, classes, confidence):
             xCenter = int(coord[0]) + int((int(coord[2]) - int(coord[0]))/2)
             yCenter = int(coord[1]) + int((int(coord[3]) - int(coord[1]))/2)
         
@@ -108,7 +109,7 @@ try:
             obj_coordinates.append([int(coord[0]), int(coord[1]), int(coord[2]), int(coord[3])])
         
         # Show depth info of the objects
-        bgr = draw_object_info(concat_color_image, concat_depth_image, obj_coordinates, classes, centre_pts)
+        bgr = draw_object_info(concat_color_image, concat_depth_image, obj_coordinates, classes, centre_pts, confidence)
         total_fps.stop()
 
         cv2.putText(bgr, f"FPS: {total_fps.getFPS():.2f}", (7,40), cv2.FONT_HERSHEY_COMPLEX, 1.4, (100, 255, 0), 3, cv2.LINE_AA)
