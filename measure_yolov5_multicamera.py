@@ -101,7 +101,7 @@ try:
         centre_pts = []
         obj_coordinates = []
 
-        for coord, cls in zip(coordinates, classes, confidence):
+        for coord, cls, conf in zip(coordinates, classes, confidence):
             xCenter = int(coord[0]) + int((int(coord[2]) - int(coord[0]))/2)
             yCenter = int(coord[1]) + int((int(coord[3]) - int(coord[1]))/2)
         

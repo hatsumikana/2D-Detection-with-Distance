@@ -18,7 +18,7 @@ def draw_object_info(bgr_frame, depth_frame, obj_boxes, obj_classes , obj_center
 
             depth = (depth_mm / 10)
             #### CHANGED HERE! CHECK IF IT WORKS! ####
-            id_conf = str(class_id) + ' ' + str(obj_conf)
+            id_conf = str(class_id) + ' ' + str(round(obj_conf,2))
             
             cv2.rectangle(bgr_frame, (x, y), (x + 250, y + 70), color, -1)
             cv2.putText(bgr_frame, id_conf.capitalize(), (x + 5, y + 25), 0, 0.8, (255, 255, 255), 2)
