@@ -1,122 +1,141 @@
+import faulthandler
+
+faulthandler.enable()
+import cv2
+import torch
+from realsense_camera import *
+import time
+from fps import FPS
+import math
 import pyrealsense2 as rs
 import numpy as np
 import cv2
 import logging
-import torch
-from realsense_camera import *
-from fps import FPS
-import math
-
-
-def draw_object_info(bgr_frame, depth_frame, obj_boxes, obj_classes , obj_centers):
-        # loop through the detection
-        for box, class_id, obj_center in zip(obj_boxes, obj_classes, obj_centers):
-            x, y, x2, y2 = box
-            
-
-            color = (255, 0, 0)
-            color = (int(color[0]), int(color[1]), int(color[2]))
-
-            cx, cy = obj_center
-            depth_mm = depth_frame[cy, cx] 
-            
-            cv2.line(bgr_frame, (cx, y), (cx, y2), color, 1)
-            cv2.line(bgr_frame, (x, cy), (x2, cy), color, 1)
-
-            class_name = class_id
-            depth = (depth_mm / 10) * math.cos(math.radians(33.4)) 
-            
-            cv2.rectangle(bgr_frame, (x, y), (x + 250, y + 70), color, -1)
-            cv2.putText(bgr_frame, class_name.capitalize(), (x + 5, y + 25), 0, 0.8, (255, 255, 255), 2)
-            cv2.putText(bgr_frame, "{} cm".format(depth), (x + 5, y + 60), 0, 1.0, (255, 255, 255), 2)
-            cv2.rectangle(bgr_frame, (x, y), (x2, y2), color, 1)
-        return bgr_frame
+from draw_object_info import draw_object_info
+from scipy.ndimage import rotate
 
 # Configure depth and color streams...
-# ...from Camera 1
+# ...from Camera 1: FRONT
 pipeline_1 = rs.pipeline()
 config_1 = rs.config()
 config_1.enable_device('919122072891')
-config_1.enable_stream(rs.stream.depth)
-config_1.enable_stream(rs.stream.color)
+config_1.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+config_1.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
 
-# ...from Camera 2
+# ...from Camera 2: LEFT
 pipeline_2 = rs.pipeline()
 config_2 = rs.config()
-config_2.enable_device('020522070950')
-config_2.enable_stream(rs.stream.depth)
-config_2.enable_stream(rs.stream.color)
+config_2.enable_device('919122073270')
+config_2.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+config_2.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
 
+# ...from Camera 3: RIGHT
+pipeline_3 = rs.pipeline()
+config_3 = rs.config()
+config_3.enable_device('112422070486')
+config_3.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+config_3.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
 
 # Start streaming from both cameras
 pipeline_1.start(config_1)
+print("Started Pipeline 1 ... ...")
 pipeline_2.start(config_2)
+print("Started Pipeline 2 ... ...")
+pipeline_3.start(config_3)
+print("Started Pipeline 3 ... ...")
 
-print("Loading ...")
+print("... ... ... ...")
 model = torch.hub.load('ultralytics/yolov5','custom', path='checkpoints/yolov5s.pt')
 print("Loaded YOLO...")
 total_fps = FPS()
-total_fps2 = FPS()
+
+try:
+    while True:
+
+        # Camera 1: FRONT
+        # Wait for a coherent pair of frames: depth and color
+        front_frames = pipeline_1.wait_for_frames()
+        front_depth_frame = front_frames.get_depth_frame()
+        front_color_frame = front_frames.get_color_frame()
+        if not front_depth_frame or not front_color_frame:
+            continue
+        # Convert images to numpy arrays
+        front_depth_image = np.asanyarray(front_depth_frame.get_data())
+        front_color_image = np.asanyarray(front_color_frame.get_data())
+        
+        # Camera 2: LEFT
+        # Wait for a coherent pair of frames: depth and color
+        left_frames = pipeline_2.wait_for_frames()
+        left_depth_frame = left_frames.get_depth_frame()
+        left_color_frame = left_frames.get_color_frame()
+        if not left_depth_frame or not left_color_frame:
+            continue
+        # Convert images to numpy arrays
+        left_depth_image = np.asanyarray(left_depth_frame.get_data())
+        left_color_image = np.asanyarray(left_color_frame.get_data())
+        left_depth_image = rotate(left_depth_image, 90, reshape=False)
+        left_color_image = rotate(left_color_image, 90, reshape=False)
+
+        # Camera 3: RIGHT
+        # Wait for a coherent pair of frames: depth and color
+        right_frames = pipeline_3.wait_for_frames()
+        right_depth_frame = right_frames.get_depth_frame()
+        right_color_frame = right_frames.get_color_frame()
+        if not right_depth_frame or not right_color_frame:
+            continue
+        # Convert images to numpy arrays
+        right_depth_image = np.asanyarray(right_depth_frame.get_data())
+        right_color_image = np.asanyarray(right_color_frame.get_data())
+        right_depth_image = rotate(right_depth_image, 90, reshape=False)
+        right_color_image = rotate(right_color_image, 90, reshape=False)
+
+        # Concat all the camera frames together
+        concat_depth_image = np.concatenate((right_depth_image, front_depth_image, left_depth_image), axis = 1)
+        concat_color_image = np.concatenate((right_color_image, front_color_image, left_color_image), axis = 1)
+
+        total_fps.start()
+        result = model(concat_color_image)
+        classes =  list(result.pandas().xyxy[0]["name"])
+        coordinates = result.xyxy[0].detach().cpu().numpy()
+        centre_pts = []
+        obj_coordinates = []
+
+        for coord, cls in zip(coordinates, classes):
+            xCenter = int(coord[0]) + int((int(coord[2]) - int(coord[0]))/2)
+            yCenter = int(coord[1]) + int((int(coord[3]) - int(coord[1]))/2)
+        
+            centre_pts.append((xCenter, yCenter))
+            obj_coordinates.append([int(coord[0]), int(coord[1]), int(coord[2]), int(coord[3])])
+        
+        # Show depth info of the objects
+        bgr = draw_object_info(concat_color_image, concat_depth_image, obj_coordinates, classes, centre_pts)
+        total_fps.stop()
+
+        cv2.putText(bgr, f"FPS: {total_fps.getFPS():.2f}", (7,40), cv2.FONT_HERSHEY_COMPLEX, 1.4, (100, 255, 0), 3, cv2.LINE_AA)
+
+        # Show Images with Depth from all cameras
+        cv2.imshow('With Depth', concat_color_image)
+
+        # Show Actual images from all cameras
+        front_color_rgb = cv2.cvtColor(front_color_image, cv2.COLOR_BGR2RGB)
+        front_color = cv2.putText(front_color_rgb, 'FRONT CAM', (50,50), cv2.FONT_HERSHEY_PLAIN, 2, (0,255,0) )
+
+        left_color_image = cv2.cvtColor(left_color_image, cv2.COLOR_BGR2RGB)
+        left_color = cv2.putText(left_color_image, 'LEFT CAM', (50,50), cv2.FONT_HERSHEY_PLAIN, 2, (0,255,0) )
+
+        right_color_image = cv2.cvtColor(right_color_image, cv2.COLOR_BGR2RGB)
+        right_color = cv2.putText(right_color_image, 'RIGHT CAM', (50,50), cv2.FONT_HERSHEY_PLAIN, 2, (0,255,0) )
+
+        cv2.imshow('Actual', np.hstack((right_color, front_color, left_color)))
+        cv2.waitKey(1)
+
+        key = cv2.waitKey(1)
+        if key == 27:
+            break
 
 
-while True:
-    # Camera 1
-    # Wait for a coherent pair of frames: depth and color
-    frames_1 = pipeline_1.wait_for_frames()
-    depth_frame_1 = frames_1.get_depth_frame()
-    color_frame_1 = frames_1.get_color_frame()
-    if not depth_frame_1 or not color_frame_1:
-        continue
-    # Convert images to numpy arrays
-    depth_image_1 = np.asanyarray(depth_frame_1.get_data())
-    color_image_1 = np.asanyarray(color_frame_1.get_data())
-    
-    # Camera 2
-    # Wait for a coherent pair of frames: depth and color
-    frames_2 = pipeline_2.wait_for_frames()
-    depth_frame_2 = frames_2.get_depth_frame()
-    color_frame_2 = frames_2.get_color_frame()
-    if not depth_frame_2 or not color_frame_2:
-        continue
-    # Convert images to numpy arrays
-    depth_image_2 = np.asanyarray(depth_frame_2.get_data())
-    color_image_2 = np.asanyarray(color_frame_2.get_data())
-    
-    color_image_concat = np.concatenate((color_image_1, color_image_2), axis=0)
-    depth_image_concat = np.concatenate((depth_image_1, depth_image_2), axis=0)
-    
-    total_fps.start()
-    result = model(color_image_concat)
-    classes =  list(result.pandas().xyxy[0]["name"])
-    coordinates = result.xyxy[0].detach().cpu().numpy()
-    centre_pts = []
-    obj_coordinates = []
-
-    for coord, cls in zip(coordinates, classes):
-        xCenter = int(coord[0]) + int((int(coord[2]) - int(coord[0]))/2)
-        yCenter = int(coord[1]) + int((int(coord[3]) - int(coord[1]))/2)
-    
-        centre_pts.append((xCenter, yCenter))
-        obj_coordinates.append([int(coord[0]), int(coord[1]), int(coord[2]), int(coord[3])])
-    
-	# Show depth info of the objects
-    bgr = draw_object_info(color_image_concat, depth_image_concat, obj_coordinates, classes, centre_pts)
-    total_fps.stop()
-    
-    cv2.putText(bgr, f"FPS: {total_fps.getFPS():.2f}", (7,40), cv2.FONT_HERSHEY_COMPLEX, 1.4, (100, 255, 0), 3, cv2.LINE_AA)
-
-    # Show images from both cameras
-    color_image_concat = cv2.cvtColor(color_image_concat, cv2.COLOR_BGR2RGB)
-    cv2.imshow('top and front', color_image_concat)
-    cv2.waitKey(1)
-
-    key = cv2.waitKey(1)
-    if key == 27:
-        break
-
-
-
-# Stop streaming
-cv2.destroyAllWindows()
-pipeline_1.stop()
-pipeline_2.stop()
+finally:
+    # Stop streaming
+    pipeline_1.stop()
+    pipeline_2.stop()
+    pipeline_3.stop()

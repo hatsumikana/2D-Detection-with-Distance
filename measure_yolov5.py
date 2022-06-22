@@ -9,6 +9,13 @@ import time
 from fps import FPS
 import math
 
+print("reset start")
+ctx = rs.context()
+devices = ctx.query_devices()
+for dev in devices:
+    dev.hardware_reset()
+print("reset done")
+
 # Load Realsense camera
 rs = RealsenseCamera()
 
@@ -22,7 +29,7 @@ def draw_object_info(bgr_frame, depth_frame, obj_boxes, obj_classes , obj_center
             color = (int(color[0]), int(color[1]), int(color[2]))
 
             cx, cy = obj_center
-            depth_mm = depth_frame[cy, cx] 
+            depth_mm = depth_frame[cy, cx]
             
             cv2.line(bgr_frame, (cx, y), (cx, y2), color, 1)
             cv2.line(bgr_frame, (x, cy), (x2, cy), color, 1)
@@ -78,5 +85,3 @@ while True:
 
 rs.release()
 cv2.destroyAllWindows()
-
-# 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
