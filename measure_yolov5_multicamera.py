@@ -1,4 +1,5 @@
 import faulthandler
+from turtle import right
 
 faulthandler.enable()
 import cv2
@@ -94,6 +95,7 @@ try:
         concat_color_image = np.concatenate((right_color_image, front_color_image, left_color_image), axis = 1)
 
         total_fps.start()
+        model.classes = [0, 1, 2, 3, 5, 7, 9, 13, 14, 15, 16, 24, 39, 41, 56]
         result = model(concat_color_image)
         classes =  list(result.pandas().xyxy[0]["name"])
         confidence = list(result.pandas().xyxy[0]["confidence"])
@@ -111,22 +113,23 @@ try:
         # Show depth info of the objects
         bgr = draw_object_info(concat_color_image, concat_depth_image, obj_coordinates, classes, centre_pts, confidence)
         total_fps.stop()
-
-        cv2.putText(bgr, f"FPS: {total_fps.getFPS():.2f}", (7,40), cv2.FONT_HERSHEY_COMPLEX, 1.4, (100, 255, 0), 3, cv2.LINE_AA)
-
+        bgr = cv2.resize(bgr, (960, 240))
+        cv2.putText(bgr, f"FPS: {total_fps.getFPS():.2f}", (7,40), cv2.FONT_HERSHEY_COMPLEX, 0.9, (100, 255, 0), 3, cv2.LINE_AA) 
         # Show Images with Depth from all cameras
-        cv2.imshow('With Depth', concat_color_image)
+        cv2.imshow('With Depth', bgr)
 
         # Show Actual images from all cameras
-        front_color_rgb = cv2.cvtColor(front_color_image, cv2.COLOR_BGR2RGB)
-        front_color = cv2.putText(front_color_rgb, 'FRONT CAM', (50,50), cv2.FONT_HERSHEY_PLAIN, 2, (0,255,0) )
+        # front_color_rgb = cv2.cvtColor(front_color_image, cv2.COLOR_BGR2RGB)
+        front_color = cv2.putText(front_color_image, 'FRONT CAM', (50,50), cv2.FONT_HERSHEY_PLAIN, 2, (0,255,0) )
+        front_color = cv2.resize(front_color, (320,240))
 
-        left_color_image = cv2.cvtColor(left_color_image, cv2.COLOR_BGR2RGB)
+        # left_color_image = cv2.cvtColor(left_color_image, cv2.COLOR_BGR2RGB)
         left_color = cv2.putText(left_color_image, 'LEFT CAM', (50,50), cv2.FONT_HERSHEY_PLAIN, 2, (0,255,0) )
+        left_color = cv2.resize(left_color, (320,240))
 
-        right_color_image = cv2.cvtColor(right_color_image, cv2.COLOR_BGR2RGB)
+        # right_color_image = cv2.cvtColor(right_color_image, cv2.COLOR_BGR2RGB)
         right_color = cv2.putText(right_color_image, 'RIGHT CAM', (50,50), cv2.FONT_HERSHEY_PLAIN, 2, (0,255,0) )
-
+        right_color = cv2.resize(right_color, (320,240))
         cv2.imshow('Actual', np.hstack((right_color, front_color, left_color)))
         cv2.waitKey(1)
 

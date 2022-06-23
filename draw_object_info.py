@@ -24,4 +24,5 @@ def draw_object_info(bgr_frame, depth_frame, obj_boxes, obj_classes , obj_center
             cv2.putText(bgr_frame, id_conf.capitalize(), (x + 5, y + 25), 0, 0.8, (255, 255, 255), 2)
             cv2.putText(bgr_frame, "{} cm".format(depth), (x + 5, y + 60), 0, 1.0, (255, 255, 255), 2)
             cv2.rectangle(bgr_frame, (x, y), (x2, y2), color, 1)
+           
         return bgr_frame
